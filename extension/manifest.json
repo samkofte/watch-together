@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "WatchParty Sync & Stream Companion",
+  "version": "1.0.0",
+  "description": "Netflix, Disney+, YouTube ve yabancı dizi sitelerinde gerçek zamanlı birlikte izleme ve video senkronizasyon eklentisi.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.netflix.com/*",
+    "*://*.disneyplus.com/*",
+    "*://*.youtube.com/*",
+    "*://*.yabancidizi.news/*",
+    "*://*.dizibox.live/*",
+    "*://*.diziyou.one/*",
+    "*://localhost/*",
+    "*://127.0.0.1/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "WatchParty Birlikte İzle"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.netflix.com/*",
+        "*://*.disneyplus.com/*",
+        "*://*.youtube.com/*",
+        "*://*.yabancidizi.news/*",
+        "*://*.dizibox.live/*",
+        "*://*.diziyou.one/*",
+        "*://*/*"
+      ],
+      "js": ["socket.io.min.js", "content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["injected.js"],
+      "matches": ["*://*.netflix.com/*", "*://*/*"]
+    }
+  ]
+}

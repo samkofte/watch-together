@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 280px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      margin: 0;
+    }
+    h3 { margin-top: 0; font-size: 15px; color: #38bdf8; display: flex; align-items: center; gap: 6px; }
+    p { font-size: 12px; color: #94a3b8; line-height: 1.4; }
+    input {
+      width: 100%;
+      background: #1e293b;
+      border: 1px solid #334155;
+      padding: 8px 10px;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 13px;
+      box-sizing: border-box;
+      margin-bottom: 10px;
+    }
+    button {
+      width: 100%;
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      color: #fff;
+      border: none;
+      padding: 8px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .status {
+      font-size: 11px;
+      color: #34d399;
+      margin-top: 8px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h3>🎬 WatchParty Sync</h3>
+  <p>Netflix, Disney+, YouTube veya dizi sitelerinde gezinirken odaya bağlanarak birlikte izleyin.</p>
+  
+  <input type="text" id="roomIdInput" placeholder="Oda Adı (örn: oda-1)">
+  <button id="connectBtn">Odaya Bağlan</button>
+
+  <div class="status" id="statusText">Sunucu: http://localhost:4000</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WatchTogether Pro - Birlikte İzle Platformu</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- HLS.js for .m3u8 live streams & third-party CDN videos -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <!-- Socket.IO -->
+  <script src="/socket.io/socket.io.js"></script>
+
+  <style>
+    :root {
+      --bg-base: #090d16;
+      --bg-panel: rgba(18, 24, 38, 0.75);
+      --bg-panel-solid: #121826;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-accent: rgba(56, 189, 248, 0.4);
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --accent: #818cf8;
+      --success: #34d399;
+      --danger: #f87171;
+      --warning: #fbbf24;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: radial-gradient(circle at top center, #131b2e 0%, var(--bg-base) 100%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    header {
+      background: rgba(9, 13, 22, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0.85rem 1.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: #fff;
+    }
+
+    .brand-badge {
+      background: linear-gradient(135deg, #0284c7, #6366f1);
+      padding: 0.35rem 0.7rem;
+      border-radius: 8px;
+      font-weight: 800;
+      font-size: 0.85rem;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 15px rgba(56, 189, 248, 0.25);
+    }
+
+    .brand-title {
+      font-weight: 700;
+      font-size: 1.15rem;
+      background: linear-gradient(to right, #fff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .room-badge {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      padding: 0.4rem 0.8rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-muted);
+    }
+
+    .room-badge strong {
+      color: var(--primary);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .btn {
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 0.5rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:active { transform: scale(0.98); }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: rgba(255, 255, 255, 0.12); }
+
+    /* Main Layout: Video + Sidebar */
+    .app-container {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 1.25rem;
+      max-width: 1700px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 1.25rem;
+      flex: 1;
+      height: calc(100vh - 70px);
+    }
+
+    @media (max-width: 1100px) {
+      .app-container {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+    }
+
+    .video-section {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      min-width: 0;
+    }
+
+    /* Media Input Bar */
+    .source-bar {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.75rem 1rem;
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .source-input {
+      flex: 1;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.6rem 1rem;
+      color: var(--text-main);
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .source-input:focus { border-color: var(--primary); }
+
+    /* Video Player Container */
+    .player-wrapper {
+      position: relative;
+      width: 100%;
+      flex: 1;
+      min-height: 440px;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #ytPlayerContainer {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    #html5Video {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+
+    /* Sync Indicator Badge */
+    .sync-badge {
+      position: absolute;
+      top: 1rem;
+      left: 1rem;
+      background: rgba(9, 13, 22, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      padding: 0.35rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-muted);
+      z-index: 10;
+      pointer-events: none;
+    }
+    .sync-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+
+    /* Floating Emoji Reactions */
+    .reaction-overlay {
+      position: absolute;
+      bottom: 2rem;
+      right: 2rem;
+      pointer-events: none;
+      z-index: 20;
+    }
+    @keyframes floatUp {
+      0% { opacity: 1; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(-160px) scale(1.6); }
+    }
+    .floating-reaction {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      font-size: 2.2rem;
+      animation: floatUp 2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    }
+
+    /* Player Controls Bar */
+    .controls-bar {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.75rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .quick-samples {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      overflow-x: auto;
+    }
+
+    .sample-pill {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      padding: 0.3rem 0.65rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .sample-pill:hover {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--primary);
+      border-color: var(--border-accent);
+    }
+
+    /* Sidebar: Users + Live Chat + Reactions */
+    .sidebar-section {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .sidebar-header {
+      padding: 0.9rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sidebar-tabs {
+      display: flex;
+      gap: 0.5rem;
+    }
+    .sidebar-tab {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 0.3rem 0.6rem;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+    .sidebar-tab.active {
+      color: var(--primary);
+      background: rgba(56, 189, 248, 0.12);
+    }
+
+    /* Users Pill List */
+    .users-bar {
+      padding: 0.65rem 1rem;
+      background: rgba(0, 0, 0, 0.2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 0.5rem;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .user-tag {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      padding: 0.25rem 0.65rem;
+      border-radius: 16px;
+      font-size: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      white-space: nowrap;
+    }
+    .user-tag.host {
+      border-color: rgba(251, 191, 36, 0.4);
+      color: var(--warning);
+    }
+
+    /* Chat Messages */
+    .chat-body {
+      flex: 1;
+      padding: 1rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .chat-msg {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      font-size: 0.85rem;
+    }
+    .chat-msg.system {
+      align-items: center;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      font-style: italic;
+      margin: 0.25rem 0;
+    }
+    .msg-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+    }
+    .msg-sender {
+      font-weight: 700;
+      color: var(--primary);
+    }
+    .msg-time {
+      color: var(--text-muted);
+      font-size: 0.7rem;
+    }
+    .msg-bubble {
+      background: rgba(255, 255, 255, 0.04);
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      line-height: 1.4;
+      border: 1px solid var(--border);
+      word-break: break-word;
+    }
+    .chat-msg.mine .msg-bubble {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: rgba(56, 189, 248, 0.3);
+    }
+
+    /* Reaction Bar */
+    .reaction-bar {
+      padding: 0.4rem 0.8rem;
+      border-top: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.15);
+      display: flex;
+      justify-content: space-around;
+      gap: 0.25rem;
+    }
+    .reaction-btn {
+      background: transparent;
+      border: none;
+      font-size: 1.25rem;
+      cursor: pointer;
+      transition: transform 0.15s;
+      padding: 0.2rem 0.4rem;
+      border-radius: 6px;
+    }
+    .reaction-btn:hover {
+      transform: scale(1.3);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    /* Chat Input */
+    .chat-footer {
+      padding: 0.75rem 1rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 0.5rem;
+    }
+    .chat-input {
+      flex: 1;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.6rem 0.85rem;
+      color: var(--text-main);
+      font-size: 0.85rem;
+      outline: none;
+    }
+    .chat-input:focus { border-color: var(--primary); }
+
+    /* Modal for Room Setup */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(10px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .modal-card {
+      background: var(--bg-panel-solid);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      width: 100%;
+      max-width: 440px;
+      padding: 1.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      box-shadow: 0 15px 50px rgba(0,0,0,0.8);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Entry Modal -->
+  <div class="modal-overlay" id="entryModal">
+    <div class="modal-card">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <span class="brand-badge">W2G REA</span>
+        <h2 style="font-size: 1.2rem;">Odaya Katıl / Başlat</h2>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">
+        Watch2Gether, Teleparty ve WatchTogether mimarisiyle tersine mühendislik uygulanmış gerçek zamanlı senkron izleme odası.
+      </p>
+
+      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <div>
+          <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem;">Kullanıcı Adınız:</label>
+          <input type="text" id="modalUsername" class="source-input" style="width: 100%;" placeholder="örn: Sinemasever">
+        </div>
+        <div>
+          <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem;">Oda Kodu (Yeni oluşturabilir veya var olana katılabilirsiniz):</label>
+          <input type="text" id="modalRoomId" class="source-input" style="width: 100%;" placeholder="oda-123">
+        </div>
+      </div>
+
+      <button class="btn" style="width: 100%; justify-content: center; padding: 0.75rem;" onclick="joinRoomFromModal()">
+        🚀 Odaya Giriş Yap
+      </button>
+    </div>
+  </div>
+
+  <header>
+    <a href="/" class="brand">
+      <span class="brand-badge">WATCH2GETHER</span>
+      <span class="brand-title">Sync Cinema & WatchParty</span>
+    </a>
+
+    <div class="header-actions">
+      <div class="room-badge">
+        <span>Oda:</span>
+        <strong id="displayRoomId">...</strong>
+      </div>
+      <button class="btn btn-secondary" onclick="copyRoomLink()">📋 Bağlantıyı Kopyala</button>
+      <button class="btn" style="background: linear-gradient(135deg, #e50914, #b20710);" onclick="openExtModal()">🧩 Netflix & Web Eklentisi</button>
+    </div>
+  </header>
+
+  <main class="app-container">
+    <!-- Video Player Column -->
+    <section class="video-section">
+      <!-- Media Loader Bar -->
+      <div class="source-bar">
+        <input 
+          type="text" 
+          id="mediaUrlInput" 
+          class="source-input" 
+          placeholder="Dışarıdan video linki girin: YouTube, HLS .m3u8, MP4 veya Dizi API bağlantısı..."
+          onkeydown="if(event.key==='Enter') loadExternalMedia()"
+        >
+        <button class="btn" onclick="loadExternalMedia()">▶ Yükle & Senkronla</button>
+      </div>
+
+      <!-- Video Player Frame -->
+      <div class="player-wrapper">
+        <div class="sync-badge">
+          <span class="sync-dot"></span>
+          <span id="syncStatusText">Senkronize Edildi</span>
+        </div>
+
+        <!-- YouTube Player Container -->
+        <div id="ytPlayerContainer" style="display: none;"></div>
+
+        <!-- HTML5 Video / HLS Player -->
+        <video id="html5Video" controls playsinline preload="auto" style="display: none;"></video>
+
+        <!-- Generic Iframe Embed Player -->
+        <iframe id="iframePlayer" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;" allowfullscreen allow="autoplay; encrypted-media"></iframe>
+
+        <!-- Floating Reactions -->
+        <div class="reaction-overlay" id="reactionOverlay"></div>
+      </div>
+
+      <!-- Quick presets -->
+      <div class="controls-bar">
+        <div class="quick-samples">
+          <span style="font-weight: 700; color: #fff;">Hızlı Örnekler:</span>
+          <span class="sample-pill" onclick="loadSample('yt')">YouTube Müzik</span>
+          <span class="sample-pill" onclick="loadSample('bigbuck')">Big Buck Bunny (MP4)</span>
+          <span class="sample-pill" onclick="loadSample('tears')">Tears of Steel (HLS .m3u8)</span>
+          <span class="sample-pill" onclick="loadSample('sintel')">Sintel (HLS .m3u8)</span>
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-muted);" id="driftDebug">
+          Gecikme: <strong><0.1s</strong> (Mükemmel)
+        </div>
+      </div>
+    </section>
+
+    <!-- Real-time Social Sidebar (Chat, Members, Reactions) -->
+    <aside class="sidebar-section">
+      <div class="sidebar-header">
+        <div class="sidebar-tabs">
+          <button class="sidebar-tab active">Sohbet & Katılımcılar</button>
+        </div>
+        <span style="font-size: 0.75rem; color: var(--success);" id="userCount">1 Çevrimiçi</span>
+      </div>
+
+      <!-- Users Tags -->
+      <div class="users-bar" id="usersBar">
+        <!-- Rendered users -->
+      </div>
+
+      <!-- Chat Messages -->
+      <div class="chat-body" id="chatBody"></div>
+
+      <!-- Reactions -->
+      <div class="reaction-bar">
+        <button class="reaction-btn" onclick="sendReaction('❤️')">❤️</button>
+        <button class="reaction-btn" onclick="sendReaction('🔥')">🔥</button>
+        <button class="reaction-btn" onclick="sendReaction('😂')">😂</button>
+        <button class="reaction-btn" onclick="sendReaction('🍿')">🍿</button>
+        <button class="reaction-btn" onclick="sendReaction('👏')">👏</button>
+        <button class="reaction-btn" onclick="sendReaction('🎉')">🎉</button>
+      </div>
+
+      <!-- Chat input -->
+      <div class="chat-footer">
+        <input 
+          type="text" 
+          id="chatInput" 
+          class="chat-input" 
+          placeholder="Mesaj yazın..." 
+          onkeydown="if(event.key==='Enter') sendChatMessage()"
+        >
+        <button class="btn" onclick="sendChatMessage()">Gönder</button>
+      </div>
+    </aside>
+  </main>
+
+  <!-- YouTube IFrame API Script -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+
+  <script>
+    const socket = io();
+    let currentRoomId = 'oda-1';
+    let currentUsername = 'Misafir_' + Math.floor(Math.random() * 899 + 100);
+    let isHost = false;
+
+    // Player state management
+    let playerType = 'youtube'; // 'youtube' | 'html5' | 'hls' | 'iframe'
+    let ytPlayer = null;
+    let ytReady = false;
+    let hlsInstance = null;
+    const html5Video = document.getElementById('html5Video');
+    const ytContainer = document.getElementById('ytPlayerContainer');
+    const iframePlayer = document.getElementById('iframePlayer');
+
+    // Sync guard: prevents event echo-loops
+    let ignoreLocalEvents = false;
+    let lastSeekSent = 0;
+
+    // Parse URL params for auto-join
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('room')) {
+      document.getElementById('modalRoomId').value = urlParams.get('room');
+    } else {
+      document.getElementById('modalRoomId').value = 'oda-' + Math.floor(Math.random() * 899 + 100);
+    }
+    document.getElementById('modalUsername').value = currentUsername;
+
+    function joinRoomFromModal() {
+      const u = document.getElementById('modalUsername').value.trim();
+      const r = document.getElementById('modalRoomId').value.trim();
+      if (u) currentUsername = u;
+      if (r) currentRoomId = r;
+
+      document.getElementById('displayRoomId').innerText = currentRoomId;
+      document.getElementById('entryModal').style.display = 'none';
+
+      // Update URL without reload
+      window.history.replaceState({}, '', `?room=${encodeURIComponent(currentRoomId)}`);
+
+      // Connect to Socket.io Room
+      socket.emit('join_room', { roomId: currentRoomId, username: currentUsername });
+    }
+
+    // Copy Invite Link
+    function copyRoomLink() {
+      const fullUrl = window.location.href;
+      navigator.clipboard.writeText(fullUrl).then(() => {
+        alert('Oda bağlantısı kopyalandı! Arkadaşlarınıza gönderebilirsiniz: ' + fullUrl);
+      });
+    }
+
+    // -------------------------------------------------------------
+    // YouTube IFrame API Hooks
+    // -------------------------------------------------------------
+    window.onYouTubeIframeAPIReady = function() {
+      ytReady = true;
+    };
+
+    function initYouTube(videoId, startTime = 0, autoplay = false) {
+      playerType = 'youtube';
+      html5Video.style.display = 'none';
+      if (iframePlayer) iframePlayer.style.display = 'none';
+      html5Video.pause();
+      ytContainer.style.display = 'block';
+
+      if (ytPlayer && ytPlayer.destroy) {
+        ytPlayer.destroy();
+      }
+
+      ytPlayer = new YT.Player('ytPlayerContainer', {
+        videoId: videoId,
+        playerVars: {
+          autoplay: autoplay ? 1 : 0,
+          controls: 1,
+          start: Math.floor(startTime),
+          modestbranding: 1,
+          rel: 0
+        },
+        events: {
+          onReady: (event) => {
+            if (startTime > 0) event.target.seekTo(startTime, true);
+            if (autoplay) event.target.playVideo();
+          },
+          onStateChange: onYTStateChange
+        }
+      });
+    }
+
+    function onYTStateChange(event) {
+      if (ignoreLocalEvents) return;
+      const t = ytPlayer.getCurrentTime();
+
+      if (event.data === YT.PlayerState.PLAYING) {
+        socket.emit('video_play', { time: t });
+      } else if (event.data === YT.PlayerState.PAUSED) {
+        socket.emit('video_pause', { time: t });
+      }
+    }
+
+    // -------------------------------------------------------------
+    // HTML5 & HLS (.m3u8) Player Hooks
+    // -------------------------------------------------------------
+    function initHTML5(url, isHls = false, startTime = 0, autoplay = false) {
+      playerType = isHls ? 'hls' : 'html5';
+      ytContainer.style.display = 'none';
+      if (iframePlayer) iframePlayer.style.display = 'none';
+      if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo();
+      html5Video.style.display = 'block';
+
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
+
+      if (isHls && Hls.isSupported()) {
+        hlsInstance = new Hls({ enableWorker: true });
+        hlsInstance.loadSource(url);
+        hlsInstance.attachMedia(html5Video);
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+          if (startTime > 0) html5Video.currentTime = startTime;
+          if (autoplay) html5Video.play().catch(() => {});
+        });
+      } else {
+        html5Video.src = url;
+        if (startTime > 0) html5Video.currentTime = startTime;
+        if (autoplay) html5Video.play().catch(() => {});
+      }
+    }
+
+    function initIframe(url) {
+      playerType = 'iframe';
+      ytContainer.style.display = 'none';
+      html5Video.style.display = 'none';
+      if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo();
+      if (html5Video.pause) html5Video.pause();
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
+      iframePlayer.src = url;
+      iframePlayer.style.display = 'block';
+    }
+
+    // HTML5 event listeners
+    html5Video.addEventListener('play', () => {
+      if (ignoreLocalEvents || playerType === 'youtube') return;
+      socket.emit('video_play', { time: html5Video.currentTime });
+    });
+
+    html5Video.addEventListener('pause', () => {
+      if (ignoreLocalEvents || playerType === 'youtube') return;
+      socket.emit('video_pause', { time: html5Video.currentTime });
+    });
+
+    html5Video.addEventListener('seeked', () => {
+      if (ignoreLocalEvents || playerType === 'youtube') return;
+      const now = Date.now();
+      if (now - lastSeekSent > 300) {
+        lastSeekSent = now;
+        socket.emit('video_seek', { time: html5Video.currentTime });
+      }
+    });
+
+    // -------------------------------------------------------------
+    // Socket.io Real-Time Synchronization Logic
+    // -------------------------------------------------------------
+
+    // 1. Initial room state sync on joining
+    socket.on('sync_init', (data) => {
+      isHost = data.isHost;
+      renderUsers(data.users);
+      renderChatHistory(data.chat);
+
+      applyMediaSource(data.videoUrl, data.videoType, data.videoId, data.currentTime, data.state === 'playing');
+    });
+
+    // 2. Play sync
+    socket.on('sync_play', ({ time, timestamp }) => {
+      ignoreLocalEvents = true;
+      executePlay(time);
+      setTimeout(() => { ignoreLocalEvents = false; }, 400);
+    });
+
+    // 3. Pause sync
+    socket.on('sync_pause', ({ time, timestamp }) => {
+      ignoreLocalEvents = true;
+      executePause(time);
+      setTimeout(() => { ignoreLocalEvents = false; }, 400);
+    });
+
+    // 4. Seek sync
+    socket.on('sync_seek', ({ time, state }) => {
+      ignoreLocalEvents = true;
+      executeSeek(time, state === 'playing');
+      setTimeout(() => { ignoreLocalEvents = false; }, 400);
+    });
+
+    // 5. Change video sync
+    socket.on('sync_change_video', ({ videoUrl, videoType, videoId, currentTime, state }) => {
+      ignoreLocalEvents = true;
+      applyMediaSource(videoUrl, videoType, videoId, currentTime, state === 'playing');
+      setTimeout(() => { ignoreLocalEvents = false; }, 400);
+    });
+
+    // 6. Host periodic heartbeat (Drift Reconciliation)
+    socket.on('sync_heartbeat', ({ serverTime, state, timestamp }) => {
+      if (isHost) return; // Host is authoritative clock
+      let localTime = getCurrentPlaybackTime();
+      let drift = Math.abs(localTime - serverTime);
+
+      document.getElementById('driftDebug').innerHTML = `Gecikme Farkı: <strong>${drift.toFixed(2)}s</strong>`;
+
+      // If drift is significant (> 1.2s), hard seek to sync with host
+      if (drift > 1.2) {
+        ignoreLocalEvents = true;
+        executeSeek(serverTime, state === 'playing');
+        setTimeout(() => { ignoreLocalEvents = false; }, 400);
+      }
+    });
+
+    // Periodic Heartbeat emission by Host
+    setInterval(() => {
+      if (isHost) {
+        const t = getCurrentPlaybackTime();
+        const s = getIsPlaying() ? 'playing' : 'paused';
+        socket.emit('host_heartbeat', { time: t, state: s });
+      }
+    }, 3000);
+
+    // Helpers to get/set playback
+    function getCurrentPlaybackTime() {
+      if (playerType === 'youtube' && ytPlayer && ytPlayer.getCurrentTime) {
+        return ytPlayer.getCurrentTime();
+      }
+      return html5Video.currentTime || 0;
+    }
+
+    function getIsPlaying() {
+      if (playerType === 'youtube' && ytPlayer && ytPlayer.getPlayerState) {
+        return ytPlayer.getPlayerState() === YT.PlayerState.PLAYING;
+      }
+      return !html5Video.paused;
+    }
+
+    function executePlay(time) {
+      if (playerType === 'youtube' && ytPlayer && ytPlayer.playVideo) {
+        if (Math.abs(ytPlayer.getCurrentTime() - time) > 1) ytPlayer.seekTo(time, true);
+        ytPlayer.playVideo();
+      } else if (html5Video) {
+        if (Math.abs(html5Video.currentTime - time) > 1) html5Video.currentTime = time;
+        html5Video.play().catch(() => {});
+      }
+    }
+
+    function executePause(time) {
+      if (playerType === 'youtube' && ytPlayer && ytPlayer.pauseVideo) {
+        if (typeof time === 'number') ytPlayer.seekTo(time, true);
+        ytPlayer.pauseVideo();
+      } else if (html5Video) {
+        if (typeof time === 'number') html5Video.currentTime = time;
+        html5Video.pause();
+      }
+    }
+
+    function executeSeek(time, shouldPlay) {
+      if (playerType === 'youtube' && ytPlayer && ytPlayer.seekTo) {
+        ytPlayer.seekTo(time, true);
+        if (shouldPlay) ytPlayer.playVideo();
+      } else if (html5Video) {
+        html5Video.currentTime = time;
+        if (shouldPlay) html5Video.play().catch(() => {});
+      }
+    }
+
+    function applyMediaSource(url, type, videoId, startTime = 0, autoplay = false) {
+      document.getElementById('mediaUrlInput').value = url;
+      if (type === 'iframe') {
+        initIframe(url);
+      } else if (type === 'youtube' || url.includes('youtube.com') || url.includes('youtu.be')) {
+        let vId = videoId;
+        if (!vId) {
+          const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+          vId = m ? m[1] : 'dQw4w9WgXcQ';
+        }
+        initYouTube(vId, startTime, autoplay);
+      } else if (url.includes('.m3u8') || url.includes('master.txt')) {
+        initHTML5(url, true, startTime, autoplay);
+      } else {
+        initHTML5(url, false, startTime, autoplay);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // External URL Loading
+    // -------------------------------------------------------------
+    async function loadExternalMedia() {
+      const url = document.getElementById('mediaUrlInput').value.trim();
+      if (!url) return alert('Lütfen geçerli bir video linki girin.');
+
+      try {
+        const res = await fetch(`/api/resolve-url?url=${encodeURIComponent(url)}`);
+        const info = await res.json();
+        socket.emit('change_video', {
+          url: info.url,
+          type: info.type,
+          videoId: info.videoId || ''
+        });
+      } catch (err) {
+        // Fallback detect
+        const isYt = url.includes('youtube.com') || url.includes('youtu.be');
+        socket.emit('change_video', {
+          url,
+          type: isYt ? 'youtube' : (url.includes('.m3u8') ? 'hls' : 'direct')
+        });
+      }
+    }
+
+    function loadSample(sample) {
+      if (sample === 'yt') {
+        document.getElementById('mediaUrlInput').value = 'https://www.youtube.com/watch?v=jfKfPfyJRdk'; // Lofi hip hop
+      } else if (sample === 'bigbuck') {
+        document.getElementById('mediaUrlInput').value = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+      } else if (sample === 'tears') {
+        document.getElementById('mediaUrlInput').value = 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8';
+      } else if (sample === 'sintel') {
+        document.getElementById('mediaUrlInput').value = 'https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8';
+      }
+      loadExternalMedia();
+    }
+
+    // -------------------------------------------------------------
+    // Users & Chat & Reactions Handlers
+    // -------------------------------------------------------------
+    socket.on('user_joined', ({ user, users }) => {
+      renderUsers(users);
+    });
+
+    socket.on('user_left', ({ userId, users }) => {
+      renderUsers(users);
+    });
+
+    socket.on('new_host', ({ hostId }) => {
+      if (socket.id === hostId) {
+        isHost = true;
+        alert('Oda yöneticisi (Host) siz oldunuz!');
+      }
+    });
+
+    function renderUsers(users) {
+      const container = document.getElementById('usersBar');
+      container.innerHTML = '';
+      document.getElementById('userCount').innerText = `${users.length} Çevrimiçi`;
+
+      users.forEach(u => {
+        const tag = document.createElement('div');
+        tag.className = 'user-tag' + (u.isHost ? ' host' : '');
+        tag.innerHTML = `${u.isHost ? '👑' : '👤'} <strong>${u.name}</strong>`;
+        container.appendChild(tag);
+      });
+    }
+
+    socket.on('chat_message', (msg) => {
+      appendChatMessage(msg);
+    });
+
+    function renderChatHistory(msgs) {
+      const box = document.getElementById('chatBody');
+      box.innerHTML = '';
+      if (msgs) msgs.forEach(appendChatMessage);
+    }
+
+    function appendChatMessage(msg) {
+      const box = document.getElementById('chatBody');
+      const item = document.createElement('div');
+
+      if (msg.system) {
+        item.className = 'chat-msg system';
+        item.innerText = msg.text;
+      } else {
+        const isMine = msg.senderId === socket.id;
+        item.className = 'chat-msg' + (isMine ? ' mine' : '');
+        item.innerHTML = `
+          <div class="msg-header">
+            <span class="msg-sender">${msg.sender}</span>
+            <span class="msg-time">${msg.time}</span>
+          </div>
+          <div class="msg-bubble">${escapeHtml(msg.text)}</div>
+        `;
+      }
+
+      box.appendChild(item);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function sendChatMessage() {
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+      if (!text) return;
+      socket.emit('send_message', { text });
+      input.value = '';
+    }
+
+    function sendReaction(emoji) {
+      socket.emit('send_reaction', { emoji });
+    }
+
+    socket.on('show_reaction', ({ emoji }) => {
+      const overlay = document.getElementById('reactionOverlay');
+      const el = document.createElement('div');
+      el.className = 'floating-reaction';
+      el.innerText = emoji;
+      el.style.left = (Math.random() * 40 - 20) + 'px';
+      overlay.appendChild(el);
+      setTimeout(() => { el.remove(); }, 2000);
+    });
+
+    function openExtModal() {
+      document.getElementById('extModal').style.display = 'flex';
+    }
+    function closeExtModal() {
+      document.getElementById('extModal').style.display = 'none';
+    }
+
+    function escapeHtml(string) {
+      const p = document.createElement('p');
+      p.appendChild(document.createTextNode(string));
+      return p.innerHTML;
+    }
+  </script>
+
+  <!-- Netflix & Web Extension Modal -->
+  <div class="modal-overlay" id="extModal" style="display: none;" onclick="if(event.target===this) closeExtModal()">
+    <div class="modal-card" style="max-width: 520px;">
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span class="brand-badge" style="background:#e50914;">TELEPARTY / W2G</span>
+          <h3 style="font-size: 1.15rem; color: #fff;">Netflix & Web Tarayıcı Eklentisi</h3>
+        </div>
+        <button onclick="closeExtModal()" style="background: none; border: none; color: var(--text-muted); font-size: 1.4rem; cursor: pointer;">✕</button>
+      </div>
+
+      <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; display: flex; flex-direction: column; gap: 0.75rem;">
+        <p>
+          Teleparty ve Watch2Gether'ın Netflix veya Disney+ gibi DRM korumalı siteleri birlikte senkronize izletmek için bir <strong>Chrome Eklentisi (Extension)</strong> kurdurmasının teknik nedeni:
+        </p>
+        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem;">
+          <ul style="padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.35rem;">
+            <li><strong>DRM ve İframe Engeli:</strong> Netflix gibi platformlar güvenlik nedeniyle iframe içine gömülemez (`X-Frame-Options: DENY`).</li>
+            <li><strong>Cadmium Video Engine Hook:</strong> Eklentimiz, Netflix'in sayfa içi <code>netflix.appContext.state.playerApp</code> API'sine ve HTML5 <code>&lt;video&gt;</code> etiketine direkt kanca (hook) atarak videoyu tüm arkadaşlarınızla aynı anda oynatır/durdurur.</li>
+          </ul>
+        </div>
+
+        <h4 style="color: var(--primary); margin-top: 0.5rem;">Eklentiyi Tarayıcınıza Yükleme Adımları:</h4>
+        <ol style="padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.35rem;">
+          <li>Chrome veya Edge'de <code>chrome://extensions</code> sayfasına gidin.</li>
+          <li>Sağ üstteki <strong>"Geliştirici Modu" (Developer Mode)</strong> butonunu açın.</li>
+          <li><strong>"Paketlenmemiş Öğe Yükle" (Load Unpacked)</strong> butonuna tıklayın.</li>
+          <li>Şu klasörü seçin:<br><code style="background: #000; padding: 2px 6px; border-radius: 4px; color: var(--success);">c:\Users\pc\Desktop\watchparty-app\extension</code></li>
+        </ol>
+        <p style="color: var(--warning); font-size: 0.8rem;">
+          ✓ Yüklendikten sonra Netflix, YouTube veya dizi izlerken sağ üstte otomatik beliren senkron çubuğuna oda kodunu girmeniz yeterlidir!
+        </p>
+      </div>
+      <button class="btn" style="width: 100%; justify-content: center;" onclick="closeExtModal()">Anladım</button>
+    </div>
+  </div>
+</body>
+</html>
